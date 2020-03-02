@@ -37,8 +37,6 @@ pub fn build_shared_libraries(
     options: &ArgMatches,
     root_build_dir: &PathBuf,
 ) -> CargoResult<SharedLibraries> {
-    let android_native_glue_src_path = write_native_app_glue_src(&root_build_dir)?;
-
     let shared_libraries: Arc<Mutex<MultiMap<Target, SharedLibrary>>> =
         Arc::new(Mutex::new(MultiMap::new()));
     for &build_target in config.build_targets.iter() {
@@ -60,14 +58,6 @@ pub fn build_shared_libraries(
         std::env::set_var("CMAKE_GENERATOR", r#"Unix Makefiles"#);
         std::env::set_var("CMAKE_MAKE_PROGRAM", util::make_path(config));
 
-        // Build android_native_glue
-        let android_native_glue_object = build_android_native_glue(
-            config,
-            &android_native_glue_src_path,
-            &build_target_dir,
-            build_target,
-        )?;
-
         // Configure compilation options so that we will build the desired build_target
         let mut opts = options.compile_options(
             workspace.config(),
@@ -83,7 +73,6 @@ pub fn build_shared_libraries(
         let executor: Arc<dyn Executor> = Arc::new(SharedLibraryExecutor {
             config: Arc::clone(&config),
             build_target_dir: build_target_dir.clone(),
-            android_native_glue_object,
             build_target,
             shared_libraries: shared_libraries.clone(),
         });
@@ -103,7 +92,6 @@ pub fn build_shared_libraries(
 struct SharedLibraryExecutor {
     config: Arc<AndroidConfig>,
     build_target_dir: PathBuf,
-    android_native_glue_object: PathBuf,
     build_target: AndroidBuildTarget,
 
     // Shared libraries built by the executor are added to this multimap
@@ -154,34 +142,33 @@ impl Executor for SharedLibraryExecutor {
             let tmp_file = TempFile::new(tmp_lib_filepath.clone(), |lib_src_file| {
                 let extra_code = r##"
 mod cargo_apk_glue_code {
-    use std::os::raw::c_void;
-
-    // Exported function which is called be Android's NativeActivity
     #[no_mangle]
-    pub unsafe extern "C" fn ANativeActivity_onCreate(
-        activity: *mut c_void,
-        saved_state: *mut c_void,
-        saved_state_size: usize,
-    ) {
-        native_app_glue_onCreate(activity, saved_state, saved_state_size);
-    }
-
     extern "C" {
-        #[allow(non_snake_case)]
-        fn native_app_glue_onCreate(
-            activity: *mut c_void,
-            saved_state: *mut c_void,
+        pub fn sapp_ANativeActivity_onCreate(
+            activity: *mut std::ffi::c_void,
+            saved_state: *mut std::ffi::c_void,
             saved_state_size: usize,
         );
     }
 
     #[no_mangle]
-    extern "C" fn android_main(_app: *mut c_void) {
+    pub unsafe extern "C" fn ANativeActivity_onCreate(
+        activity: *mut std::ffi::c_void,
+        saved_state: *mut std::ffi::c_void,
+        saved_state_size: usize,
+    ) {
+        sapp_ANativeActivity_onCreate(activity, saved_state, saved_state_size as _);
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn sokol_main() {
         let _ = super::main();
     }
 
     #[link(name = "android")]
     #[link(name = "log")]
+    #[link(name = "EGL")]
+    #[link(name = "GLESv3")]
     extern "C" {}
 }"##;
                 writeln!( lib_src_file, "{}\n{}", original_contents, extra_code)?;
@@ -291,9 +278,6 @@ mod cargo_apk_glue_code {
 
             // Add path to folder containing libgcc.a to search path
             new_args.push(build_arg("-Clink-arg=-L", gcc_lib_path));
-
-            // Add android native glue
-            new_args.push(build_arg("-Clink-arg=", &self.android_native_glue_object));
 
             // Strip symbols for release builds
             if self.config.release {
@@ -487,46 +471,6 @@ fn find_library_path<S: AsRef<Path>>(paths: &Vec<PathBuf>, library: S) -> Option
             None
         }
     }).nth(0)
-}
-
-/// Returns the path to the ".c" file for the android native app glue
-fn write_native_app_glue_src(android_artifacts_dir: &Path) -> CargoResult<PathBuf> {
-    let output_dir = android_artifacts_dir.join("native_app_glue");
-    fs::create_dir_all(&output_dir).unwrap();
-
-    let mut h_file = File::create(output_dir.join("android_native_app_glue.h"))?;
-    h_file.write_all(&include_bytes!("../../../native_app_glue/android_native_app_glue.h")[..])?;
-
-    let c_path = output_dir.join("android_native_app_glue.c");
-    let mut c_file = File::create(&c_path)?;
-    c_file.write_all(&include_bytes!("../../../native_app_glue/android_native_app_glue.c")[..])?;
-
-    Ok(c_path)
-}
-
-/// Returns the path to the built object file for the android native glue
-fn build_android_native_glue(
-    config: &AndroidConfig,
-    android_native_glue_src_path: &PathBuf,
-    build_target_dir: &PathBuf,
-    build_target: AndroidBuildTarget,
-) -> CargoResult<PathBuf> {
-    let clang = util::find_clang(config, build_target)?;
-
-    let android_native_glue_build_path = build_target_dir.join("android_native_glue");
-    fs::create_dir_all(&android_native_glue_build_path)?;
-    let android_native_glue_object_path =
-        android_native_glue_build_path.join("android_native_glue.o");
-
-    // Will produce warnings when bulding on linux? Create constants for extensions that can be used.. Or have separate functions?
-    util::script_process(clang)
-        .arg(android_native_glue_src_path)
-        .arg("-c")
-        .arg("-o")
-        .arg(&android_native_glue_object_path)
-        .exec()?;
-
-    Ok(android_native_glue_object_path)
 }
 
 /// Write a CMake toolchain which will remove references to the rustc build target before including
