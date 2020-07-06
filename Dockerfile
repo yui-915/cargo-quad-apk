@@ -34,9 +34,6 @@ COPY . /root/cargo-apk
 # Install binary
 RUN cargo install --path /root/cargo-apk/cargo-apk
 
-# Run tests
-RUN cd /root/cargo-apk/cargo-apk && ./tests/run_tests.sh
-
 # Remove source and build files
 RUN rm -rf /root/cargo-apk
 
