@@ -1,10 +1,10 @@
 use crate::config::AndroidConfig;
 use crate::ops::install;
+use anyhow::format_err;
 use cargo::core::{TargetKind, Workspace};
 use cargo::util::process_builder::process;
 use cargo::util::CargoResult;
 use clap::ArgMatches;
-use failure::format_err;
 
 pub fn run(workspace: &Workspace, config: &AndroidConfig, options: &ArgMatches) -> CargoResult<()> {
     let build_result = install::install(workspace, config, options)?;

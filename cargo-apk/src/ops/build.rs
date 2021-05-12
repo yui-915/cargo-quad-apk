@@ -5,11 +5,11 @@ mod util;
 
 use self::compile::SharedLibraries;
 use crate::config::{AndroidConfig, AndroidTargetConfig};
+use anyhow::format_err;
 use cargo::core::{Target, TargetKind, Workspace};
 use cargo::util::process_builder::process;
 use cargo::util::CargoResult;
 use clap::ArgMatches;
-use failure::format_err;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;

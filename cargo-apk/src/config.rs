@@ -1,8 +1,8 @@
+use anyhow::format_err;
 use cargo::core::{TargetKind, Workspace};
 use cargo::ops;
 use cargo::util::CargoResult;
 use cargo::CliError;
-use failure::format_err;
 use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::btree_map::BTreeMap;
@@ -279,7 +279,7 @@ pub fn load(
             file.read_to_string(&mut content).unwrap();
             content
         };
-        let config: TomlConfig = toml::from_str(&content).map_err(failure::Error::from)?;
+        let config: TomlConfig = toml::from_str(&content).map_err(anyhow::Error::from)?;
         config.package.metadata.and_then(|m| m.android)
     };
 

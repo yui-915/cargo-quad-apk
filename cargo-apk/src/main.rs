@@ -1,8 +1,8 @@
+use anyhow::format_err;
 use cargo::core::Workspace;
 use cargo::util::process_builder::process;
 use cargo::util::Config as CargoConfig;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
-use failure::format_err;
 
 use cargo::util::command_prelude::opt;
 use cargo::util::command_prelude::AppExt;
@@ -37,12 +37,8 @@ fn main() {
     cargo_config
         .configure(
             args.occurrences_of("verbose") as u32,
-            if args.is_present("quiet") {
-                Some(true)
-            } else {
-                None
-            },
-            &args.value_of("color").map(|s| s.to_string()),
+            args.is_present("quiet"),
+            args.value_of("color"),
             args.is_present("frozen"),
             args.is_present("locked"),
             args.is_present("offline"),
@@ -50,6 +46,7 @@ fn main() {
             &args
                 .values_of_lossy("unstable-features")
                 .unwrap_or_default(),
+            &[],
         )
         .unwrap();
 

@@ -2,15 +2,16 @@ use super::tempfile::TempFile;
 use super::util;
 use crate::config::AndroidBuildTarget;
 use crate::config::AndroidConfig;
+use anyhow::format_err;
 use cargo::core::compiler::Executor;
 use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget};
 use cargo::core::manifest::TargetSourcePath;
 use cargo::core::{PackageId, Target, TargetKind, Workspace};
 use cargo::util::command_prelude::{ArgMatchesExt, ProfileChecking};
-use cargo::util::{process, CargoResult, ProcessBuilder, dylib_path};
+use cargo::util::{dylib_path, process, CargoResult, ProcessBuilder};
 use clap::ArgMatches;
-use failure::format_err;
 use multimap::MultiMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::File;
@@ -18,7 +19,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::collections::{HashSet, HashMap};
 
 pub struct SharedLibrary {
     pub abi: AndroidBuildTarget,
@@ -65,8 +65,9 @@ pub fn build_shared_libraries(
             Some(&workspace),
             ProfileChecking::Unchecked,
         )?;
-        opts.build_config.requested_kind =
-            CompileKind::Target(CompileTarget::new(build_target.rust_triple())?);
+        opts.build_config.requested_kinds = vec![CompileKind::Target(CompileTarget::new(
+            build_target.rust_triple(),
+        )?)];
 
         // Create executor
         let config = Arc::new(config.clone());
@@ -101,7 +102,7 @@ struct SharedLibraryExecutor {
 impl Executor for SharedLibraryExecutor {
     fn exec(
         &self,
-        cmd: ProcessBuilder,
+        cmd: &ProcessBuilder,
         _id: PackageId,
         target: &Target,
         mode: CompileMode,
@@ -343,7 +344,8 @@ mod cargo_apk_glue_code {
                 found_dylibs.entry(dylib).or_insert(false);
             }
 
-            while let Some(dylib) = found_dylibs.iter()
+            while let Some(dylib) = found_dylibs
+                .iter()
                 .find(|(_, is_processed)| !*is_processed)
                 .map(|(dylib, _)| dylib.clone())
             {
@@ -368,7 +370,10 @@ mod cargo_apk_glue_code {
                         },
                     );
                 } else {
-                    on_stderr_line(&format!("Warning: Shared library \"{}\" not found.", &dylib))?;
+                    on_stderr_line(&format!(
+                        "Warning: Shared library \"{}\" not found.",
+                        &dylib
+                    ))?;
                 }
             }
         } else if mode == CompileMode::Test {
@@ -409,33 +414,39 @@ fn list_needed_dylibs(readelf_path: &Path, library_path: &Path) -> CargoResult<H
         .arg(&library_path)
         .exec_with_output()?;
     use std::io::BufRead;
-    Ok(readelf_output.stdout.lines().filter_map(|l| {
-        let l = l.as_ref().unwrap();
-        if l.contains("(NEEDED)") {
-            if let Some(lib) = l.split("Shared library: [").last() {
-                if let Some(lib) = lib.split("]").next() {
-                    return Some(lib.into());
+    Ok(readelf_output
+        .stdout
+        .lines()
+        .filter_map(|l| {
+            let l = l.as_ref().unwrap();
+            if l.contains("(NEEDED)") {
+                if let Some(lib) = l.split("Shared library: [").last() {
+                    if let Some(lib) = lib.split("]").next() {
+                        return Some(lib.into());
+                    }
                 }
             }
-        }
-        None
-    }).collect())
+            None
+        })
+        .collect())
 }
 
 /// List Android shared libraries
 fn list_android_dylibs(version_specific_libraries_path: &Path) -> CargoResult<HashSet<String>> {
     fs::read_dir(version_specific_libraries_path)?
         .filter_map(|entry| {
-            entry.map(|entry| {
-                if entry.path().is_file() {
-                    if let Some(file_name) = entry.file_name().to_str() {
-                        if file_name.ends_with(".so") {
-                            return Some(file_name.into());
+            entry
+                .map(|entry| {
+                    if entry.path().is_file() {
+                        if let Some(file_name) = entry.file_name().to_str() {
+                            if file_name.ends_with(".so") {
+                                return Some(file_name.into());
+                            }
                         }
                     }
-                }
-                None
-            }).transpose()
+                    None
+                })
+                .transpose()
         })
         .collect::<Result<_, _>>()
         .map_err(|err| err.into())
@@ -444,33 +455,40 @@ fn list_android_dylibs(version_specific_libraries_path: &Path) -> CargoResult<Ha
 /// Get native library search paths from rustc args
 fn libs_search_paths_from_args(args: &[std::ffi::OsString]) -> Vec<PathBuf> {
     let mut is_search_path = false;
-    args.iter().filter_map(|arg| {
-        if is_search_path {
-            is_search_path = false;
-            arg.to_str().and_then(|arg| if arg.starts_with("native=") || arg.starts_with("dependency=") {
-                Some(arg.split("=").last().unwrap().into())
+    args.iter()
+        .filter_map(|arg| {
+            if is_search_path {
+                is_search_path = false;
+                arg.to_str().and_then(|arg| {
+                    if arg.starts_with("native=") || arg.starts_with("dependency=") {
+                        Some(arg.split("=").last().unwrap().into())
+                    } else {
+                        None
+                    }
+                })
             } else {
+                if arg == "-L" {
+                    is_search_path = true;
+                }
                 None
-            })
-        } else {
-            if arg == "-L" {
-                is_search_path = true;
             }
-            None
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 /// Resolves native library using search paths
 fn find_library_path<S: AsRef<Path>>(paths: &Vec<PathBuf>, library: S) -> Option<PathBuf> {
-    paths.iter().filter_map(|path| {
-        let lib_path = path.join(&library);
-        if lib_path.is_file() {
-            Some(lib_path)
-        } else {
-            None
-        }
-    }).nth(0)
+    paths
+        .iter()
+        .filter_map(|path| {
+            let lib_path = path.join(&library);
+            if lib_path.is_file() {
+                Some(lib_path)
+            } else {
+                None
+            }
+        })
+        .nth(0)
 }
 
 /// Write a CMake toolchain which will remove references to the rustc build target before including

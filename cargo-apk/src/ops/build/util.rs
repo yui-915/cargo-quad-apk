@@ -1,7 +1,7 @@
 use crate::config::{AndroidBuildTarget, AndroidConfig};
+use anyhow::format_err;
 use cargo::core::{Target, TargetKind, Workspace};
 use cargo::util::{process, CargoResult, ProcessBuilder};
-use failure::format_err;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
