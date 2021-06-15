@@ -20,7 +20,7 @@ fn main() {
     };
 
     let args = match args.subcommand() {
-        ("apk", Some(subcommand_matches)) => subcommand_matches,
+        ("quad-apk", Some(subcommand_matches)) => subcommand_matches,
         _ => &args,
     };
 
@@ -116,7 +116,7 @@ fn cli() -> App<'static, 'static> {
 }
 
 fn cli_apk() -> App<'static, 'static> {
-    SubCommand::with_name("apk")
+    SubCommand::with_name("quad-apk")
         .settings(&[
             AppSettings::UnifiedHelpMessage,
             AppSettings::DeriveDisplayOrder,

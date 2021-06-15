@@ -36,7 +36,7 @@ ENV NDK_HOME /usr/local/android-ndk-r20
 COPY . /root/cargo-apk
 
 # Install binary
-RUN cargo install --path /root/cargo-apk/cargo-apk
+RUN cargo install --path /root/cargo-apk
 
 # Remove source and build files
 RUN rm -rf /root/cargo-apk
