@@ -1,10 +1,10 @@
 [package]
-name = "cargo-apk"
-version = "0.5.0"
-authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>", "Philip Alldredge <philip@philipalldredge.com>"]
+name = "cargo-quad-apk"
+version = "0.1.0"
+authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>", "Philip Alldredge <philip@philipalldredge.com>", "Fedor Logachev <not.fl3@gmail.com>"]
 license = "MIT"
 description = "Cargo subcommand that allows you to build Android packages"
-repository = "https://github.com/rust-windowing/android-rs-glue/tree/master/cargo-apk"
+repository = "https://github.com/not-fl3/cargo-apk"
 edition = "2018"
 
 [dependencies]

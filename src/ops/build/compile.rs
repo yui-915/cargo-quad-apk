@@ -143,7 +143,6 @@ impl Executor for SharedLibraryExecutor {
             let tmp_file = TempFile::new(tmp_lib_filepath.clone(), |lib_src_file| {
                 let extra_code = r##"
 mod cargo_apk_glue_code {
-    #[no_mangle]
     extern "C" {
         pub fn sapp_ANativeActivity_onCreate(
             activity: *mut std::ffi::c_void,
