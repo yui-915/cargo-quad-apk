@@ -106,6 +106,7 @@ fn cli() -> App<'static, 'static> {
                 .number_of_values(1)
                 .global(true),
         )
+        .arg(opt("nosign", "Skip \"apksigner\" build step to produced unsigned APK.").global(true))
         .subcommands(vec![
             cli_apk(),
             cli_build(),

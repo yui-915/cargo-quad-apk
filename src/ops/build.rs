@@ -31,13 +31,16 @@ pub fn build(
     let root_build_dir = util::get_root_build_directory(workspace, config);
     let shared_libraries =
         compile::build_shared_libraries(workspace, config, options, &root_build_dir)?;
-    build_apks(config, &root_build_dir, shared_libraries)
+    let sign = !options.is_present("nosign");
+
+    build_apks(config, &root_build_dir, shared_libraries, sign)
 }
 
 fn build_apks(
     config: &AndroidConfig,
     root_build_dir: &PathBuf,
     shared_libraries: SharedLibraries,
+    sign: bool,
 ) -> CargoResult<BuildResult> {
     // Create directory to hold final APKs which are signed using the debug key
     let final_apk_dir = root_build_dir.join("apk");
@@ -178,19 +181,20 @@ fn build_apks(
                 .exec()?;
         }
 
-        // Sign the APK with the development certificate
-        util::script_process(
-            build_tools_path.join(format!("apksigner{}", util::EXECUTABLE_SUFFIX_BAT)),
-        )
-        .arg("sign")
-        .arg("--ks")
-        .arg(keystore_path)
-        .arg("--ks-pass")
-        .arg("pass:android")
-        .arg(&final_apk_path)
-        .cwd(&target_directory)
-        .exec()?;
-
+        if sign {
+            // Sign the APK with the development certificate
+            util::script_process(
+                build_tools_path.join(format!("apksigner{}", util::EXECUTABLE_SUFFIX_BAT)),
+            )
+            .arg("sign")
+            .arg("--ks")
+            .arg(keystore_path)
+            .arg("--ks-pass")
+            .arg("pass:android")
+            .arg(&final_apk_path)
+            .cwd(&target_directory)
+            .exec()?;
+        }
         target_to_apk_map.insert(
             (target.kind().to_owned(), target.name().to_owned()),
             final_apk_path,
