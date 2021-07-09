@@ -71,11 +71,13 @@ pub fn build_shared_libraries(
 
         // Create executor
         let config = Arc::new(config.clone());
+        let nostrip = options.is_present("nostrip");
         let executor: Arc<dyn Executor> = Arc::new(SharedLibraryExecutor {
             config: Arc::clone(&config),
             build_target_dir: build_target_dir.clone(),
             build_target,
             shared_libraries: shared_libraries.clone(),
+            nostrip,
         });
 
         // Compile all targets for the requested build target
@@ -94,6 +96,8 @@ struct SharedLibraryExecutor {
     config: Arc<AndroidConfig>,
     build_target_dir: PathBuf,
     build_target: AndroidBuildTarget,
+
+    nostrip: bool,
 
     // Shared libraries built by the executor are added to this multimap
     shared_libraries: Arc<Mutex<MultiMap<Target, SharedLibrary>>>,
@@ -280,8 +284,10 @@ mod cargo_apk_glue_code {
             new_args.push(build_arg("-Clink-arg=-L", gcc_lib_path));
 
             // Strip symbols for release builds
-            if self.config.release {
-                new_args.push("-Clink-arg=-strip-all".into());
+            if self.nostrip == false {
+                if self.config.release {
+                    new_args.push("-Clink-arg=-strip-all".into());
+                }
             }
 
             // Require position independent code

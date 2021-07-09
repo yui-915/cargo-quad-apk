@@ -107,6 +107,7 @@ fn cli() -> App<'static, 'static> {
                 .global(true),
         )
         .arg(opt("nosign", "Skip \"apksigner\" build step to produced unsigned APK.").global(true))
+        .arg(opt("nostrip", "Skip \"striop\" build step, to keep debug symbols even in release builds.").global(true))
         .subcommands(vec![
             cli_apk(),
             cli_build(),

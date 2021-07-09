@@ -41,6 +41,9 @@ RUN cargo install --path /root/cargo-apk
 # Remove source and build files
 RUN rm -rf /root/cargo-apk
 
+# Add build-tools to PATH, for apksigner
+ENV PATH="/opt/android-sdk-linux/build-tools/29.0.0/:${PATH}"
+
 # Make directory for user code
 RUN mkdir /root/src
 WORKDIR /root/src
