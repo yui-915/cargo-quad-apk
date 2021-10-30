@@ -2,7 +2,7 @@ use super::BuildResult;
 use crate::config::AndroidConfig;
 use crate::ops::build;
 use cargo::core::Workspace;
-use cargo::util::process_builder::process;
+use cargo_util::ProcessBuilder;
 use cargo::util::CargoResult;
 use clap::ArgMatches;
 
@@ -22,7 +22,7 @@ pub fn install(
             apk_path.file_name().unwrap().to_string_lossy()
         ));
 
-        process(&adb)
+        ProcessBuilder::new(&adb)
             .arg("install")
             .arg("-r")
             .arg(apk_path)

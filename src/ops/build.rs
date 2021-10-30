@@ -7,8 +7,8 @@ use self::compile::SharedLibraries;
 use crate::config::{AndroidConfig, AndroidTargetConfig};
 use anyhow::format_err;
 use cargo::core::{Target, TargetKind, Workspace};
-use cargo::util::process_builder::process;
 use cargo::util::CargoResult;
+use cargo_util::ProcessBuilder;
 use clap::ArgMatches;
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -77,7 +77,7 @@ fn build_apks(
                 .map_err(|e| format_err!("Unable to delete APK file. {}", e))?;
         }
 
-        let mut aapt_package_cmd = process(&aapt_path);
+        let mut aapt_package_cmd = ProcessBuilder::new(&aapt_path);
         aapt_package_cmd
             .arg("package")
             .arg("-F")
@@ -114,7 +114,7 @@ fn build_apks(
             fs::copy(&shared_library.path, target_shared_object_path)?;
 
             // Add to the APK
-            process(&aapt_path)
+            ProcessBuilder::new(&aapt_path)
                 .arg("add")
                 .arg(&unaligned_apk_name)
                 .arg(so_path)
@@ -132,7 +132,7 @@ fn build_apks(
 
         // Align apk
         let final_apk_path = target_apk_directory.join(format!("{}.apk", target.name()));
-        process(&zipalign_path)
+        ProcessBuilder::new(&zipalign_path)
             .arg("-f")
             .arg("-v")
             .arg("4")
@@ -158,7 +158,7 @@ fn build_apks(
             };
 
             let keytool_path = find_java_executable(keytool_filename)?;
-            process(keytool_path)
+            ProcessBuilder::new(keytool_path)
                 .arg("-genkey")
                 .arg("-v")
                 .arg("-keystore")

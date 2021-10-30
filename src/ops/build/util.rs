@@ -1,7 +1,8 @@
 use crate::config::{AndroidBuildTarget, AndroidConfig};
 use anyhow::format_err;
 use cargo::core::{Target, TargetKind, Workspace};
-use cargo::util::{process, CargoResult, ProcessBuilder};
+use cargo::util::CargoResult;
+use cargo_util::ProcessBuilder;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 
@@ -161,11 +162,11 @@ pub fn find_readelf(
 /// allow execution of batch files.
 pub fn script_process(cmd: impl AsRef<OsStr>) -> ProcessBuilder {
     if cfg!(target_os = "windows") {
-        let mut pb = process("cmd");
+        let mut pb = ProcessBuilder::new("cmd");
         pb.arg("/C").arg(cmd);
         pb
     } else {
-        process(cmd)
+        ProcessBuilder::new(cmd)
     }
 }
 

@@ -2,7 +2,7 @@ use crate::config::AndroidConfig;
 use crate::ops::install;
 use anyhow::format_err;
 use cargo::core::{TargetKind, Workspace};
-use cargo::util::process_builder::process;
+use cargo_util::ProcessBuilder;
 use cargo::util::CargoResult;
 use clap::ArgMatches;
 
@@ -51,7 +51,7 @@ pub fn run(workspace: &Workspace, config: &AndroidConfig, options: &ArgMatches) 
     );
 
     drop(writeln!(workspace.config().shell().err(), "Running apk"));
-    process(&adb)
+    ProcessBuilder::new(&adb)
         .arg("shell")
         .arg("am")
         .arg("start")

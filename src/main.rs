@@ -1,6 +1,6 @@
 use anyhow::format_err;
 use cargo::core::Workspace;
-use cargo::util::process_builder::process;
+use cargo_util::ProcessBuilder;
 use cargo::util::Config as CargoConfig;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
@@ -106,8 +106,20 @@ fn cli() -> App<'static, 'static> {
                 .number_of_values(1)
                 .global(true),
         )
-        .arg(opt("nosign", "Skip \"apksigner\" build step to produced unsigned APK.").global(true))
-        .arg(opt("nostrip", "Skip \"striop\" build step, to keep debug symbols even in release builds.").global(true))
+        .arg(
+            opt(
+                "nosign",
+                "Skip \"apksigner\" build step to produced unsigned APK.",
+            )
+            .global(true),
+        )
+        .arg(
+            opt(
+                "nostrip",
+                "Skip \"striop\" build step, to keep debug symbols even in release builds.",
+            )
+            .global(true),
+        )
         .subcommands(vec![
             cli_apk(),
             cli_build(),
@@ -360,7 +372,7 @@ pub fn execute_logcat(options: &ArgMatches, cargo_config: &CargoConfig) -> cargo
         "Starting logcat"
     ));
     let adb = android_config.sdk_path.join("platform-tools/adb");
-    process(&adb).arg("logcat").exec()?;
+    ProcessBuilder::new(&adb).arg("logcat").exec()?;
 
     Ok(())
 }

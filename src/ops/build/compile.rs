@@ -8,7 +8,8 @@ use cargo::core::compiler::{CompileKind, CompileMode, CompileTarget};
 use cargo::core::manifest::TargetSourcePath;
 use cargo::core::{PackageId, Target, TargetKind, Workspace};
 use cargo::util::command_prelude::{ArgMatchesExt, ProfileChecking};
-use cargo::util::{dylib_path, process, CargoResult, ProcessBuilder};
+use cargo::util::CargoResult;
+use cargo_util::{paths::dylib_path, ProcessBuilder};
 use clap::ArgMatches;
 use multimap::MultiMap;
 use std::collections::{HashMap, HashSet};
@@ -63,7 +64,7 @@ pub fn build_shared_libraries(
             workspace.config(),
             CompileMode::Build,
             Some(&workspace),
-            ProfileChecking::Unchecked,
+            ProfileChecking::Custom,
         )?;
         opts.build_config.requested_kinds = vec![CompileKind::Target(CompileTarget::new(
             build_target.rust_triple(),
@@ -414,7 +415,7 @@ mod cargo_apk_glue_code {
 
 /// List all linked shared libraries
 fn list_needed_dylibs(readelf_path: &Path, library_path: &Path) -> CargoResult<HashSet<String>> {
-    let readelf_output = process(readelf_path)
+    let readelf_output = ProcessBuilder::new(readelf_path)
         .arg("-d")
         .arg(&library_path)
         .exec_with_output()?;
