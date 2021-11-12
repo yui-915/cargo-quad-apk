@@ -20,6 +20,7 @@ RUN mkdir ${ANDROID_HOME} && \
     unzip -q sdk-tools-linux-4333796.zip && \
     rm sdk-tools-linux-4333796.zip && \
     chown -R root:root /opt
+RUN mkdir -p ~/.android && touch ~/.android/repositories.cfg
 RUN yes | ${ANDROID_HOME}/tools/bin/sdkmanager "platform-tools" | grep -v = || true
 RUN yes | ${ANDROID_HOME}/tools/bin/sdkmanager "platforms;android-29" | grep -v = || true
 RUN yes | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;29.0.0"  | grep -v = || true
