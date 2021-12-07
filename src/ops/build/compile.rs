@@ -169,12 +169,6 @@ mod cargo_apk_glue_code {
     pub unsafe extern "C" fn sokol_main() {
         let _ = super::main();
     }
-
-    #[link(name = "android")]
-    #[link(name = "log")]
-    #[link(name = "EGL")]
-    #[link(name = "GLESv3")]
-    extern "C" {}
 }"##;
                 writeln!( lib_src_file, "{}\n{}", original_contents, extra_code)?;
 
