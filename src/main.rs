@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::format_err;
 use cargo::core::Workspace;
 use cargo_util::ProcessBuilder;
@@ -20,12 +22,12 @@ fn main() {
     };
 
     let args = match args.subcommand() {
-        ("quad-apk", Some(subcommand_matches)) => subcommand_matches,
+        Some(("quad-apk", subcommand_matches)) => subcommand_matches,
         _ => &args,
     };
 
     let (command, subcommand_args) = match args.subcommand() {
-        (command, Some(subcommand_args)) => (command, subcommand_args),
+        Some((command, subcommand_args)) => (command, subcommand_args),
         _ => {
             drop(cli().print_help());
             return;
@@ -71,12 +73,11 @@ fn main() {
     }
 }
 
-fn cli() -> App<'static, 'static> {
+fn cli() -> App<'static> {
     App::new("cargo-apk")
         .settings(&[
             AppSettings::UnifiedHelpMessage,
             AppSettings::DeriveDisplayOrder,
-            AppSettings::VersionlessSubcommands,
             AppSettings::AllowExternalSubcommands,
         ])
         .arg(
@@ -84,11 +85,10 @@ fn cli() -> App<'static, 'static> {
                 "verbose",
                 "Use verbose output (-vv very verbose/build.rs output)",
             )
-            .short("v")
-            .multiple(true)
+            .short('v')
             .global(true),
         )
-        .arg(opt("quiet", "No output printed to stdout").short("q"))
+        .arg(opt("quiet", "No output printed to stdout").short('q'))
         .arg(
             opt("color", "Coloring: auto, always, never")
                 .value_name("WHEN")
@@ -100,7 +100,7 @@ fn cli() -> App<'static, 'static> {
         .arg(
             Arg::with_name("unstable-features")
                 .help("Unstable (nightly-only) flags to Cargo, see 'cargo -Z help' for details")
-                .short("Z")
+                .short('Z')
                 .value_name("FLAG")
                 .multiple(true)
                 .number_of_values(1)
@@ -129,7 +129,7 @@ fn cli() -> App<'static, 'static> {
         ])
 }
 
-fn cli_apk() -> App<'static, 'static> {
+fn cli_apk() -> App<'static> {
     SubCommand::with_name("quad-apk")
         .settings(&[
             AppSettings::UnifiedHelpMessage,
@@ -140,7 +140,7 @@ fn cli_apk() -> App<'static, 'static> {
         .subcommands(vec![cli_build(), cli_install(), cli_run(), cli_logcat()])
 }
 
-fn cli_build() -> App<'static, 'static> {
+fn cli_build() -> App<'static> {
     SubCommand::with_name("build")
         .settings(&[
             AppSettings::UnifiedHelpMessage,
@@ -172,6 +172,7 @@ fn cli_build() -> App<'static, 'static> {
         .arg_target_triple("Build for the target triple")
         .arg_target_dir()
         .arg(opt("out-dir", "Copy final artifacts to this directory").value_name("PATH"))
+        .arg_profile("Build artifacts with the specified profile")
         .arg_manifest_path()
         .arg_message_format()
         .arg_build_plan()
@@ -188,7 +189,7 @@ the --release flag will use the `release` profile instead.
         )
 }
 
-fn cli_install() -> App<'static, 'static> {
+fn cli_install() -> App<'static> {
     SubCommand::with_name("install")
         .settings(&[
             AppSettings::UnifiedHelpMessage,
@@ -212,7 +213,7 @@ fn cli_install() -> App<'static, 'static> {
             "list all installed packages and their versions",
         ))
         .arg_jobs()
-        .arg(opt("force", "Force overwriting existing crates or binaries").short("f"))
+        .arg(opt("force", "Force overwriting existing crates or binaries").short('f'))
         .arg_features()
         .arg(opt("debug", "Build in debug mode instead of release mode"))
         .arg_targets_bins_examples(
@@ -263,7 +264,7 @@ continuous integration systems.",
         )
 }
 
-fn cli_run() -> App<'static, 'static> {
+fn cli_run() -> App<'static> {
     SubCommand::with_name("run")
         .settings(&[
             AppSettings::UnifiedHelpMessage,
@@ -300,7 +301,7 @@ run. If you're passing arguments to both Cargo and the binary, the ones after
         )
 }
 
-fn cli_logcat() -> App<'static, 'static> {
+fn cli_logcat() -> App<'static> {
     SubCommand::with_name("logcat")
         .settings(&[
             AppSettings::UnifiedHelpMessage,
