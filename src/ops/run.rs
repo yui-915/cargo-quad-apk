@@ -46,7 +46,7 @@ pub fn run(workspace: &Workspace, config: &AndroidConfig, options: &ArgMatches) 
     // Found it by doing this :
     //     adb shell "cmd package resolve-activity --brief com.author.myproject | tail -n 1"
     let activity_path = format!(
-        "{}/android.app.NativeActivity",
+        "{}/.MainActivity",
         package_name.replace("-", "_"),
     );
 

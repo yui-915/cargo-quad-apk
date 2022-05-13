@@ -37,6 +37,7 @@ pub fn build_shared_libraries(
     config: &AndroidConfig,
     options: &ArgMatches,
     root_build_dir: &PathBuf,
+    miniquad_root_path: &PathBuf,
 ) -> CargoResult<SharedLibraries> {
     let shared_libraries: Arc<Mutex<MultiMap<Target, SharedLibrary>>> =
         Arc::new(Mutex::new(MultiMap::new()));
@@ -78,6 +79,7 @@ pub fn build_shared_libraries(
             build_target_dir: build_target_dir.clone(),
             build_target,
             shared_libraries: shared_libraries.clone(),
+            miniquad_root_path: miniquad_root_path.clone(),
             nostrip,
         });
 
@@ -98,6 +100,7 @@ struct SharedLibraryExecutor {
     build_target_dir: PathBuf,
     build_target: AndroidBuildTarget,
 
+    miniquad_root_path: PathBuf,
     nostrip: bool,
 
     // Shared libraries built by the executor are added to this multimap
@@ -118,6 +121,10 @@ impl Executor for SharedLibraryExecutor {
             && (target.kind() == &TargetKind::Bin || target.kind() == &TargetKind::ExampleBin)
         {
             let mut new_args = cmd.get_args().to_owned();
+
+            let target_config = self
+                .config
+                .resolve((target.kind().to_owned(), target.name().to_owned()))?;
 
             //
             // Determine source path
@@ -145,31 +152,31 @@ impl Executor for SharedLibraryExecutor {
 
             // Create the temporary file
             let original_contents = fs::read_to_string(original_src_filepath).unwrap();
+
+            let extra_code = format!(
+                "mod cargo_apk_glue_code {{ {} }}",
+                fs::read_to_string(
+                    self.miniquad_root_path
+                        .join("src")
+                        .join("native")
+                        .join("android")
+                        .join("mod_inject.rs"),
+                )
+                .unwrap()
+            );
+
+            // check "Resolving Native Method Names"
+            // https://docs.oracle.com/javase/1.5.0/docs/guide/jni/spec/design.html
+            let package_name = target_config
+                .package_name
+                .replace("_", "_1")
+                .replace("-", "_1")
+                .replace(".", "_");
+
+            let extra_code =
+                extra_code.replace("JAVA_CLASS_PATH", &format!("Java_{}", package_name));
+
             let tmp_file = TempFile::new(tmp_lib_filepath.clone(), |lib_src_file| {
-                let extra_code = r##"
-mod cargo_apk_glue_code {
-    extern "C" {
-        pub fn sapp_ANativeActivity_onCreate(
-            activity: *mut std::ffi::c_void,
-            saved_state: *mut std::ffi::c_void,
-            saved_state_size: usize,
-        );
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn ANativeActivity_onCreate(
-        activity: *mut std::ffi::c_void,
-        saved_state: *mut std::ffi::c_void,
-        saved_state_size: usize,
-    ) {
-        sapp_ANativeActivity_onCreate(activity, saved_state, saved_state_size as _);
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn sokol_main() {
-        let _ = super::main();
-    }
-}"##;
                 writeln!( lib_src_file, "{}\n{}", original_contents, extra_code)?;
 
                 Ok(())

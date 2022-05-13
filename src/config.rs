@@ -52,6 +52,8 @@ pub struct AndroidConfig {
 
     /// Target specific configuration settings
     target_configs: BTreeMap<(TargetKind, String), TomlAndroidTarget>,
+
+    pub java_packages: Vec<String>,
 }
 
 impl AndroidConfig {
@@ -142,6 +144,13 @@ impl AndroidConfig {
                 .into_iter()
                 .map(AndroidPermission::from)
                 .collect(),
+            services: primary_config
+                .and_then(|a| a.service.clone())
+                .or_else(|| self.default_target_config.service.clone())
+                .unwrap_or_else(Vec::new)
+                .into_iter()
+                .map(AndroidService::from)
+                .collect(),
         })
     }
 }
@@ -191,6 +200,20 @@ impl From<TomlPermission> for AndroidPermission {
     }
 }
 
+#[derive(Clone)]
+pub struct AndroidService {
+    pub name: String,
+    pub enabled: bool,
+}
+
+impl From<TomlService> for AndroidService {
+    fn from(p: TomlService) -> Self {
+        AndroidService {
+            name: p.name,
+            enabled: p.enabled,
+        }
+    }
+}
 /// Android build settings for a specific target
 pub struct AndroidTargetConfig {
     /// Name that the package will have on the Android machine.
@@ -242,6 +265,9 @@ pub struct AndroidTargetConfig {
 
     /// uses-permission in AndroidManifest.xml
     pub permissions: Vec<AndroidPermission>,
+
+    /// services in AndroidManifest.xml
+    pub services: Vec<AndroidService>,
 }
 
 pub fn load(
@@ -251,22 +277,15 @@ pub fn load(
     // Find out the package requested by the user.
     let package = {
         let packages = Vec::from_iter(flag_package.iter().cloned());
-        let spec = ops::Packages::Packages(packages);
-
-        match spec {
-            ops::Packages::Default => unreachable!("cargo apk supports single package only"),
-            ops::Packages::All => unreachable!("cargo apk supports single package only"),
-            ops::Packages::OptOut(_) => unreachable!("cargo apk supports single package only"),
-            ops::Packages::Packages(xs) => match xs.len() {
-                0 => workspace.current()?,
-                1 => workspace
-                    .members()
-                    .find(|pkg| *pkg.name() == xs[0])
-                    .ok_or_else(|| {
-                        format_err!("package `{}` is not a member of the workspace", xs[0])
-                    })?,
-                _ => unreachable!("cargo apk supports single package only"),
-            },
+        match packages.len() {
+            0 => workspace.current()?,
+            1 => workspace
+                .members()
+                .find(|pkg| *pkg.name() == packages[0])
+                .ok_or_else(|| {
+                    format_err!("package `{}` is not a member of the workspace", packages[0])
+                })?,
+            _ => unreachable!("cargo apk supports single package only"),
         }
     };
 
@@ -376,6 +395,11 @@ pub fn load(
         .map(|a| a.default_target_config.clone())
         .unwrap_or_else(Default::default);
 
+    let java_packages = manifest_content
+        .as_ref()
+        .and_then(|a| a.java_packages.clone())
+        .unwrap_or_else(Default::default);
+
     let mut target_configs = BTreeMap::new();
     manifest_content
         .as_ref()
@@ -418,6 +442,7 @@ pub fn load(
             }),
         default_target_config,
         target_configs,
+        java_packages,
     })
 }
 
@@ -457,6 +482,8 @@ struct TomlAndroid {
 
     bin: Option<Vec<TomlAndroidSpecificTarget>>,
     example: Option<Vec<TomlAndroidSpecificTarget>>,
+    java_packages: Option<Vec<String>>,
+    java_crates: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -472,6 +499,13 @@ struct TomlFeature {
 struct TomlPermission {
     name: String,
     max_sdk_version: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TomlService {
+    name: String,
+    enabled: bool,
 }
 
 /// Configuration specific to a single cargo target
@@ -500,4 +534,5 @@ struct TomlAndroidTarget {
     opengles_version_minor: Option<u8>,
     feature: Option<Vec<TomlFeature>>,
     permission: Option<Vec<TomlPermission>>,
+    service: Option<Vec<TomlService>>,
 }

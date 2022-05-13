@@ -1,4 +1,8 @@
+// some really useful links:
+// https://stackoverflow.com/questions/59504840/create-jni-ndk-apk-only-command-line-without-gradle-ant-or-cmake/59533703#59533703
+//
 mod compile;
+mod preprocessor;
 mod targets;
 pub mod tempfile;
 mod util;
@@ -6,16 +10,21 @@ mod util;
 use self::compile::SharedLibraries;
 use crate::config::{AndroidConfig, AndroidTargetConfig};
 use anyhow::format_err;
-use cargo::core::{Target, TargetKind, Workspace};
-use cargo::util::CargoResult;
+use cargo::{
+    core::{compiler, resolver, Target, TargetKind, Workspace},
+    ops,
+    util::CargoResult,
+};
 use cargo_util::ProcessBuilder;
 use clap::ArgMatches;
-use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
-use std::{env, fs};
+
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    io::Write,
+    path::{Path, PathBuf},
+    {env, fs},
+};
 
 #[derive(Debug)]
 pub struct BuildResult {
@@ -28,20 +37,42 @@ pub fn build(
     config: &AndroidConfig,
     options: &ArgMatches,
 ) -> CargoResult<BuildResult> {
+    let root_source_path = workspace.root();
     let root_build_dir = util::get_root_build_directory(workspace, config);
-    let shared_libraries =
-        compile::build_shared_libraries(workspace, config, options, &root_build_dir)?;
+    let miniquad_root_path = util::find_package_root_path(workspace, config, "miniquad");
+    let java_files = util::collect_java_files(workspace, config);
+    let shared_libraries = compile::build_shared_libraries(
+        workspace,
+        config,
+        options,
+        &root_build_dir,
+        &miniquad_root_path,
+    )?;
     let sign = !options.is_present("nosign");
 
-    build_apks(config, &root_build_dir, shared_libraries, sign)
+    build_apks(
+        config,
+        root_source_path,
+        &root_build_dir,
+        shared_libraries,
+        java_files,
+        sign,
+        &miniquad_root_path,
+    )
 }
 
 fn build_apks(
     config: &AndroidConfig,
+    root_source_path: &Path,
     root_build_dir: &PathBuf,
     shared_libraries: SharedLibraries,
+    java_files: util::JavaFiles,
     sign: bool,
+    miniquad_root_path: &PathBuf,
 ) -> CargoResult<BuildResult> {
+    let main_activity_path = miniquad_root_path.join("java").join("MainActivity.java");
+    let quad_native_path = miniquad_root_path.join("java").join("QuadNative.java");
+
     // Create directory to hold final APKs which are signed using the debug key
     let final_apk_dir = root_build_dir.join("apk");
     fs::create_dir_all(&final_apk_dir)?;
@@ -52,6 +83,7 @@ fn build_apks(
     // Build an APK for each cargo target
     for (target, shared_libraries) in shared_libraries.shared_libraries.iter_all() {
         let target_directory = util::get_target_directory(root_build_dir, target)?;
+
         fs::create_dir_all(&target_directory)?;
 
         // Determine Target Configuration
@@ -67,6 +99,7 @@ fn build_apks(
             .join("build-tools")
             .join(&config.build_tools_version);
         let aapt_path = build_tools_path.join("aapt");
+        let dx_path = build_tools_path.join("dx");
         let zipalign_path = build_tools_path.join("zipalign");
 
         // Create unaligned APK which includes resources and assets
@@ -77,13 +110,94 @@ fn build_apks(
                 .map_err(|e| format_err!("Unable to delete APK file. {}", e))?;
         }
 
+        let obj_dir = target_directory.join("build").join("obj");
+        fs::create_dir_all(&obj_dir)?;
+
+        let gen_dir = target_directory.join("build").join("gen");
+        fs::create_dir_all(&gen_dir)?;
+
+        let package_name = target_config.package_name.replace("-", "_");
+        let library_name = target_config
+            .package_name
+            .split(".")
+            .last()
+            .unwrap()
+            .clone();
+
+        let mut r_java_path = gen_dir.clone();
+        for file_part in package_name.split('.') {
+            r_java_path = r_java_path.join(file_part);
+        }
+
+        let mut java_dir = target_directory.clone();
+        for file_part in package_name.split('.') {
+            java_dir = java_dir.join(file_part);
+        }
+        fs::create_dir_all(&java_dir)?;
+
+        let target_activity_path = java_dir.join("MainActivity.java");
+
+        let java_src = fs::read_to_string(&main_activity_path)
+            .expect("Something went wrong reading miniquad's MainActivity.java file");
+
+        let java_src = preprocessor::preprocess_main_activity(
+            &java_src,
+            &package_name,
+            &library_name,
+            &java_files.main_activity_injects,
+        );
+
+        fs::write(&target_activity_path, java_src)?;
+
+        let target_quad_native_path = target_directory.join("quad_native").join("QuadNative.java");
+        fs::create_dir_all(target_quad_native_path.parent().unwrap())?;
+        fs::copy(&quad_native_path, &target_quad_native_path)?;
+
+        for (global_path, local_path) in &java_files.java_files {
+            let java_src = fs::read_to_string(global_path)
+                .expect("Something went wrong reading miniquad's MainActivity.java file");
+
+            let java_src = java_src.replace("TARGET_PACKAGE_NAME", &package_name);
+            let java_src = java_src.replace("LIBRARY_NAME", &library_name);
+
+            let local_path = local_path.strip_prefix("java/")?;
+
+            let target_path = target_directory.join(&local_path);
+            let dir_path = local_path.parent().unwrap();
+            fs::create_dir_all(target_directory.join(dir_path))?;
+
+            fs::write(&target_path, java_src)?;
+        }
+
+        let res_dir = target_directory.join("res").join("layout");
+        fs::create_dir_all(&res_dir)?;
+        let res_file = res_dir.join("main.xml");
+        let mut res_file = File::create(&res_file)?;
+        writeln!(
+            res_file,
+            "{}",
+            r##"<?xml version="1.0" encoding="utf-8"?>
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:orientation="vertical"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            >
+        </LinearLayout>
+        "##
+        );
+
         let mut aapt_package_cmd = ProcessBuilder::new(&aapt_path);
         aapt_package_cmd
             .arg("package")
             .arg("-F")
             .arg(&unaligned_apk_name)
+            .arg("-m")
+            .arg("-J")
+            .arg("build/gen")
             .arg("-M")
             .arg("AndroidManifest.xml")
+            .arg("-S")
+            .arg("res")
             .arg("-I")
             .arg(&config.android_jar_path);
 
@@ -97,6 +211,65 @@ fn build_apks(
         }
 
         aapt_package_cmd.cwd(&target_directory).exec()?;
+
+        let mut classpath = config.android_jar_path.to_str().unwrap().to_string();
+        for (comptime_jar, _) in &java_files.comptime_jar_files {
+            classpath.push_str(":");
+            classpath.push_str(comptime_jar.to_str().unwrap());
+        }
+
+        let javac_filename = if cfg!(target_os = "windows") {
+            "javac.exe"
+        } else {
+            "javac"
+        };
+        let javac_path = find_java_executable(javac_filename)?;
+
+        let rt_jar_path = find_rt_jar()?;
+
+        let mut java_cmd = ProcessBuilder::new(javac_path);
+        java_cmd
+            .arg("-source")
+            .arg("1.7")
+            .arg("-target")
+            .arg("1.7")
+            .arg("-Xlint:deprecation")
+            .arg("-bootclasspath")
+            // TODO: fix hardcoded path!
+            .arg(rt_jar_path)
+            .arg("-classpath")
+            .arg(&classpath)
+            .arg("-d")
+            .arg("build/obj");
+        java_cmd.arg("quad_native/QuadNative.java");
+        for (_, java_file) in &java_files.java_files {
+            let java_file = java_file.strip_prefix("java/")?;
+            java_cmd.arg(&java_file);
+        }
+        java_cmd
+            .arg(r_java_path.join("R.java"))
+            .arg(target_activity_path);
+
+        java_cmd.cwd(&target_directory).exec()?;
+
+        let mut dx_cmd = ProcessBuilder::new(&dx_path);
+        dx_cmd
+            .arg("--dex")
+            .arg("--output=classes.dex")
+            .arg("--min-sdk-version")
+            .arg("26")
+            .arg("build/obj/");
+        for (runtime_jar, _) in &java_files.runtime_jar_files {
+            dx_cmd.arg(&runtime_jar);
+        }
+        dx_cmd.cwd(&target_directory).exec()?;
+
+        ProcessBuilder::new(&aapt_path)
+            .arg("add")
+            .arg(&unaligned_apk_name)
+            .arg("classes.dex")
+            .cwd(&target_directory)
+            .exec()?;
 
         // Add shared libraries to the APK
         for shared_library in shared_libraries {
@@ -238,6 +411,34 @@ fn find_java_executable(name: &str) -> CargoResult<PathBuf> {
         })
 }
 
+fn find_rt_jar() -> CargoResult<String> {
+    let java_filename = if cfg!(target_os = "windows") {
+        "java.exe"
+    } else {
+        "java"
+    };
+    let java_path = find_java_executable(java_filename)?;
+
+    let mut res = None;
+    let mut cmd = ProcessBuilder::new(&java_path)
+        .arg("-verbose")
+        .exec_with_streaming(
+            &mut |stdout: &str| {
+                if stdout.contains("Opened") && stdout.contains("rt.jar") {
+                    res = Some(stdout[8..stdout.len() - 1].to_string());
+                }
+
+                Ok(())
+            },
+            &mut |_| Ok(()),
+            false,
+        );
+
+    if res.is_none() {
+        panic!("rt.jar cant be found, probably JRE is not installed");
+    }
+    Ok(res.unwrap())
+}
 fn build_manifest(
     path: &Path,
     config: &AndroidConfig,
@@ -250,7 +451,7 @@ fn build_manifest(
     // Building application attributes
     let application_attrs = format!(
         r#"
-            android:hasCode="false" android:label="{0}"{1}{2}{3}"#,
+            android:hasCode="true" android:label="{0}"{1}{2}{3}"#,
         target_config.package_label,
         target_config
             .package_icon
@@ -275,7 +476,7 @@ fn build_manifest(
     // Build activity attributes
     let activity_attrs = format!(
         r#"
-                android:name="android.app.NativeActivity"
+                android:name=".MainActivity"
                 android:label="{0}"
                 android:configChanges="orientation|keyboardHidden|screenSize" {1}"#,
         target_config.package_label,
@@ -317,6 +518,20 @@ fn build_manifest(
         .collect::<Vec<String>>()
         .join(", ");
 
+    // <service android:name="" android:enabled="true"></service>
+
+    let services = target_config
+        .services
+        .iter()
+        .map(|f| {
+            format!(
+                "\n\t<service android:name=\"{}\" android:enabled=\"{}\"></service>",
+                f.name, f.enabled
+            )
+        })
+        .collect::<Vec<String>>()
+        .join(", ");
+
     // Write final AndroidManifest
     writeln!(
         file,
@@ -328,6 +543,7 @@ fn build_manifest(
     <uses-sdk android:targetSdkVersion="{targetSdkVersion}" android:minSdkVersion="{minSdkVersion}" />
     <uses-feature android:glEsVersion="{glEsVersion}" android:required="true"></uses-feature>{uses_features}{uses_permissions}
     <application {application_attrs} >
+        {services}
         <activity {activity_attrs} >
             <meta-data android:name="android.app.lib_name" android:value="{target_name}" />
             <intent-filter>
@@ -351,6 +567,7 @@ fn build_manifest(
         application_attrs = application_attrs,
         activity_attrs = activity_attrs,
         target_name = target.name(),
+        services = services
     )?;
 
     Ok(())
