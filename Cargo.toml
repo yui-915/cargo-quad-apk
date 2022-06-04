@@ -8,8 +8,8 @@ repository = "https://github.com/not-fl3/cargo-apk"
 edition = "2018"
 
 [dependencies]
-cargo = {git = "https://github.com/rust-lang/cargo"} # "0.60.0"
-cargo-util = {git = "https://github.com/rust-lang/cargo"}  # "0.1"
+cargo = "0.62.0"
+cargo-util = "0.1"
 clap = "3.1.0"
 itertools = "0.8.2"
 dirs = "2.0.2"
