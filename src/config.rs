@@ -144,13 +144,6 @@ impl AndroidConfig {
                 .into_iter()
                 .map(AndroidPermission::from)
                 .collect(),
-            services: primary_config
-                .and_then(|a| a.service.clone())
-                .or_else(|| self.default_target_config.service.clone())
-                .unwrap_or_else(Vec::new)
-                .into_iter()
-                .map(AndroidService::from)
-                .collect(),
         })
     }
 }
@@ -200,20 +193,6 @@ impl From<TomlPermission> for AndroidPermission {
     }
 }
 
-#[derive(Clone)]
-pub struct AndroidService {
-    pub name: String,
-    pub enabled: bool,
-}
-
-impl From<TomlService> for AndroidService {
-    fn from(p: TomlService) -> Self {
-        AndroidService {
-            name: p.name,
-            enabled: p.enabled,
-        }
-    }
-}
 /// Android build settings for a specific target
 pub struct AndroidTargetConfig {
     /// Name that the package will have on the Android machine.
@@ -265,9 +244,6 @@ pub struct AndroidTargetConfig {
 
     /// uses-permission in AndroidManifest.xml
     pub permissions: Vec<AndroidPermission>,
-
-    /// services in AndroidManifest.xml
-    pub services: Vec<AndroidService>,
 }
 
 pub fn load(

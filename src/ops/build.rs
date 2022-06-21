@@ -92,7 +92,13 @@ fn build_apks(
         //
         // Run commands to produce APK
         //
-        build_manifest(&target_directory, &config, &target_config, &target)?;
+        build_manifest(
+            &target_directory,
+            &config,
+            &target_config,
+            &target,
+            &java_files,
+        )?;
 
         let build_tools_path = config
             .sdk_path
@@ -444,6 +450,7 @@ fn build_manifest(
     config: &AndroidConfig,
     target_config: &AndroidTargetConfig,
     target: &Target,
+    java_files: &util::JavaFiles,
 ) -> CargoResult<()> {
     let file = path.join("AndroidManifest.xml");
     let mut file = File::create(&file)?;
@@ -520,13 +527,13 @@ fn build_manifest(
 
     // <service android:name="" android:enabled="true"></service>
 
-    let services = target_config
-        .services
+    let services = java_files
+        .java_services
         .iter()
-        .map(|f| {
+        .map(|service| {
             format!(
                 "\n\t<service android:name=\"{}\" android:enabled=\"{}\"></service>",
-                f.name, f.enabled
+                service, true
             )
         })
         .collect::<Vec<String>>()
