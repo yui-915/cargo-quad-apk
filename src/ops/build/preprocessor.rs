@@ -6,6 +6,7 @@ struct ClassInject {
     on_resume: String,
     on_pause: String,
     on_create: String,
+    on_activity_result: String,
 }
 
 #[derive(Debug, Default)]
@@ -27,6 +28,9 @@ impl Inject {
         self.main_activity
             .on_create
             .push_str(&other.main_activity.on_create);
+        self.main_activity
+            .on_activity_result
+            .push_str(&other.main_activity.on_activity_result);
     }
 }
 
@@ -68,6 +72,12 @@ fn parse_inject_template(file: &str) -> Inject {
             target = Some(&mut res.main_activity.on_pause);
             continue;
         }
+        if line.starts_with("//%") && line.contains("MAIN_ACTIVITY_ON_ACTIVITY_RESULT") {
+            assert!(target.is_none());
+
+            target = Some(&mut res.main_activity.on_activity_result);
+            continue;
+        }
         if line.starts_with("//%") && line.contains("END") {
             assert!(target.is_some());
             target = None;
@@ -106,12 +116,22 @@ test();
 
 //% END
 
+//% MAIN_ACTIVITY_ON_ACTIVITY_RESULT
+
+if (requestCode == FILE_REQUEST_CODE) {}
+
+//% END
+
 "##;
 
     let injects = parse_inject_template(&file);
     assert_eq!(injects.imports, "import a.a.a;\nimport a.a.b;\n");
     assert_eq!(injects.main_activity.body, "public int a;\n");
     assert_eq!(injects.main_activity.on_create, "test();\n");
+    assert_eq!(
+        injects.main_activity.on_activity_result,
+        "if (requestCode == FILE_REQUEST_CODE) {}\n"
+    );
 }
 
 pub fn preprocess_main_activity(
@@ -136,6 +156,10 @@ pub fn preprocess_main_activity(
     let res = res.replace("//% MAIN_ACTIVITY_ON_RESUME", &m.on_resume);
     let res = res.replace("//% MAIN_ACTIVITY_ON_PAUSE", &m.on_pause);
     let res = res.replace("//% MAIN_ACTIVITY_ON_CREATE", &m.on_create);
+    let res = res.replace(
+        "//% MAIN_ACTIVITY_ON_ACTIVITY_RESULT",
+        &m.on_activity_result,
+    );
 
     res
 }
