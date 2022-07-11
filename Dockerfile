@@ -1,7 +1,15 @@
-FROM rust:stretch
+FROM rust:slim-bullseye
 
+RUN echo 'deb http://httpredir.debian.org/debian-security stretch/updates main' >/etc/apt/sources.list.d/jessie-backports.list
+# see https://bugs.debian.org/775775
+# and https://github.com/docker-library/java/issues/19#issuecomment-70546872
+RUN export CA_CERTIFICATES_JAVA_VERSION=20170929~deb9u3
 RUN apt-get update
-RUN apt-get install -yq openjdk-8-jre unzip wget cmake
+RUN apt install -yq software-properties-common
+# this is horrible, we really need to switch to some sensible distro
+RUN apt-add-repository 'deb http://security.debian.org/debian-security stretch/updates main'
+RUN apt-get update
+RUN apt-get install -yq openjdk-8-jre-headless openjdk-8-jdk-headless unzip wget cmake
 
 RUN rustup toolchain install 1.61.0
 RUN rustup default 1.61
@@ -35,6 +43,8 @@ ENV NDK_HOME /usr/local/android-ndk-r20
 
 # Copy contents to container. Should only use this on a clean directory
 COPY . /root/cargo-apk
+
+RUN apt-get install -qy libssl-dev pkg-config
 
 # Install binary
 RUN cargo install --path /root/cargo-apk
