@@ -175,6 +175,7 @@ dependencies = [
  "cargo-util",
  "clap",
  "dirs",
+ "glob",
  "itertools 0.8.2",
  "multimap",
  "serde",

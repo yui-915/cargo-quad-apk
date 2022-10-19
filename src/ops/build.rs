@@ -105,7 +105,7 @@ fn build_apks(
             .join("build-tools")
             .join(&config.build_tools_version);
         let aapt_path = build_tools_path.join("aapt");
-        let dx_path = build_tools_path.join("dx");
+        let d8_path = build_tools_path.join("d8");
         let zipalign_path = build_tools_path.join("zipalign");
 
         // Create unaligned APK which includes resources and assets
@@ -257,17 +257,21 @@ fn build_apks(
 
         java_cmd.cwd(&target_directory).exec()?;
 
-        let mut dx_cmd = ProcessBuilder::new(&dx_path);
-        dx_cmd
-            .arg("--dex")
-            .arg("--output=classes.dex")
-            .arg("--min-sdk-version")
-            .arg("26")
-            .arg("build/obj/");
-        for (runtime_jar, _) in &java_files.runtime_jar_files {
-            dx_cmd.arg(&runtime_jar);
+        let mut d8_cmd = ProcessBuilder::new(&d8_path);
+        for class_file in glob::glob(target_directory.join("**/*.class").to_str().unwrap()).unwrap()
+        {
+            let file = class_file.unwrap();
+            d8_cmd.arg(file.to_str().unwrap());
         }
-        dx_cmd.cwd(&target_directory).exec()?;
+        for (runtime_jar, _) in &java_files.runtime_jar_files {
+            d8_cmd.arg(&runtime_jar);
+        }
+        // otherwise "Type `java.lang.System` was not found" error
+        d8_cmd.arg("--no-desugaring");
+        d8_cmd.arg("--min-api")
+            .arg("26");
+
+        d8_cmd.cwd(&target_directory).exec()?;
 
         ProcessBuilder::new(&aapt_path)
             .arg("add")

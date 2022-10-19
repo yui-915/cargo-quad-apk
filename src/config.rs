@@ -343,7 +343,7 @@ pub fn load(
     let android_version = manifest_content
         .as_ref()
         .and_then(|a| a.android_version)
-        .unwrap_or(29);
+        .unwrap_or(31);
 
     // Check that the tool for the android platform is installed
     let android_jar_path = Path::new(&sdk_path)
