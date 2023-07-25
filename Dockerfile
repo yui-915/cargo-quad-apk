@@ -1,18 +1,16 @@
-FROM rust:slim-bullseye
+FROM rust:slim-bookworm
 
-RUN echo 'deb http://httpredir.debian.org/debian-security stretch/updates main' >/etc/apt/sources.list.d/jessie-backports.list
-# see https://bugs.debian.org/775775
-# and https://github.com/docker-library/java/issues/19#issuecomment-70546872
-RUN export CA_CERTIFICATES_JAVA_VERSION=20170929~deb9u3
 RUN apt-get update
+RUN apt install -yq wget
+RUN wget http://www.mirbsd.org/~tg/Debs/sources.txt/wtf-bookworm.sources
+RUN  mkdir -p /etc/apt/sources.list.d
+RUN mv wtf-bookworm.sources /etc/apt/sources.list.d/
+RUN apt-get update --fix-missing
 RUN apt install -yq software-properties-common
-# this is horrible, we really need to switch to some sensible distro
-RUN apt-add-repository 'deb http://security.debian.org/debian-security stretch/updates main'
-RUN apt-get update
 RUN apt-get install -yq openjdk-8-jre-headless openjdk-8-jdk-headless unzip wget cmake
 
-RUN rustup toolchain install 1.65.0
-RUN rustup default 1.65
+RUN rustup toolchain install 1.71.0
+RUN rustup default 1.71
 RUN rustc --version
 
 RUN rustup target add armv7-linux-androideabi
