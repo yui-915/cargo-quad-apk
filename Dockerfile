@@ -1,13 +1,7 @@
-FROM rust:slim-bookworm
+FROM archlinux
 
-RUN apt-get update
-RUN apt install -yq wget
-RUN wget http://www.mirbsd.org/~tg/Debs/sources.txt/wtf-bookworm.sources
-RUN  mkdir -p /etc/apt/sources.list.d
-RUN mv wtf-bookworm.sources /etc/apt/sources.list.d/
-RUN apt-get update --fix-missing
-RUN apt install -yq software-properties-common
-RUN apt-get install -yq openjdk-8-jre-headless openjdk-8-jdk-headless unzip wget cmake
+RUN pacman -Syu --noconfirm
+RUN pacman -S --noconfirm jdk8-openjdk unzip wget cmake rustup openssl pkgconf
 
 RUN rustup toolchain install 1.71.0
 RUN rustup default 1.71
@@ -20,6 +14,7 @@ RUN rustup target add x86_64-linux-android
 
 # Install Android SDK
 ENV ANDROID_HOME /opt/android-sdk-linux
+ENV JAVA_HOME /usr/lib/jvm/default
 RUN mkdir ${ANDROID_HOME} && \
     cd ${ANDROID_HOME} && \
     wget -q https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip && \
@@ -42,7 +37,8 @@ ENV NDK_HOME /usr/local/android-ndk-r25
 # Copy contents to container. Should only use this on a clean directory
 COPY . /root/cargo-apk
 
-RUN apt-get install -qy libssl-dev pkg-config
+# This should be on top, but I am saving some time rebuilding the container. Sorry!
+RUN pacman -S --noconfirm gcc
 
 # Install binary
 RUN cargo install --path /root/cargo-apk
