@@ -3,6 +3,11 @@ FROM archlinux
 RUN pacman -Syu --noconfirm
 RUN pacman -S --noconfirm jdk8-openjdk unzip wget cmake rustup openssl pkgconf
 
+# github override HOME, so here we are
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH 
+
 RUN rustup toolchain install 1.71.0
 RUN rustup default 1.71
 RUN rustc --version
