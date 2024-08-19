@@ -168,7 +168,7 @@ pub fn find_libunwind_dir(
     config: &AndroidConfig,
     build_target: AndroidBuildTarget,
 ) -> CargoResult<PathBuf> {
-    let libunwind_dir = llvm_toolchain_root(config).join("lib64").join("clang");
+    let libunwind_dir = llvm_toolchain_root(config).join("lib").join("clang");
     let clang_ver = libunwind_dir
         .read_dir()?
         .next()
